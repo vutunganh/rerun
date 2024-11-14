@@ -246,8 +246,6 @@ pub fn texture_creation_desc_from_color_image<'a>(
 ) -> ImageDataDesc<'a> {
     re_tracing::profile_function!();
 
-    // TODO(#7608): All image data ingestion conversions should all be handled by re_renderer!
-
     let (data, format) = if let Some(pixel_format) = image.format.pixel_format {
         let data = cast_slice_to_cow(image.buffer.as_slice());
         let coefficients = match pixel_format.yuv_matrix_coefficients() {
@@ -322,6 +320,7 @@ pub fn texture_creation_desc_from_color_image<'a>(
             // Why not use `Rgba8UnormSrgb`? Because premul must happen _before_ sRGB decode, so we can't
             // use a "Srgb-aware" texture like `Rgba8UnormSrgb` for RGBA.
             (ColorModel::RGB, ChannelDatatype::U8) => (
+                // TODO(#7700): RGB->BGR conversion should be handled by re_renderer.
                 pad_rgb_to_rgba(&image.buffer, u8::MAX).into(),
                 SourceImageDataFormat::WgpuCompatible(TextureFormat::Rgba8Unorm),
             ),
@@ -344,6 +343,7 @@ pub fn texture_creation_desc_from_color_image<'a>(
             //
             // See also [`required_shader_decode`] which lists this case as a format that does not need to be decoded.
             (ColorModel::BGR, ChannelDatatype::U8) => {
+                // TODO(#7700): RGB->BGR conversion should be handled by re_renderer.
                 let padded_data = pad_rgb_to_rgba(&image.buffer, u8::MAX).into();
                 let texture_format = if required_shader_decode(device_caps, &image.format).is_some()
                 {
