@@ -125,14 +125,30 @@ impl VideoChunkDecoder {
         let frame_idx = 0;
         let frame = &frames[frame_idx];
 
-        let frame_time_range = frame.info.presentation_time_range();
+        let texture_frame_info = video_texture.frame_info.as_ref();
+        let new_frame_time_range = frame.info.presentation_time_range();
 
-        let is_up_to_date = video_texture
-            .frame_info
-            .as_ref()
-            .is_some_and(|info| info.presentation_time_range() == frame_time_range);
+        let texture_is_already_up_to_date = texture_frame_info
+            .is_some_and(|info| info.presentation_time_range() == new_frame_time_range);
+        let new_frame_is_newer_than_texture = texture_frame_info.map_or(true, |info| {
+            // We don't expect frame ranges to ever overlap, but semantically it is more accurate
+            // to use the end of the texture frame range as the comparison point.
+            new_frame_time_range.start >= info.presentation_time_range().end
+        });
+        let new_frame_is_exact_frame_requested =
+            new_frame_time_range.contains(&presentation_timestamp);
 
-        if frame_time_range.contains(&presentation_timestamp) && !is_up_to_date {
+        // The frame may not be the exact one we asked for.
+        // However, if it is newer than what we have on screen right now, it's still clearly better.
+        // This is especially important if for some reason the decoder is lagging behind our timeline.
+        //
+        // We don't apply this logic if we're jumping back in time relative to what's in the texture.
+        // If we were to do that, we might end up showing frames that are older than the point in time that
+        // a user jumped to which would be rather confusing.
+        // (This is because decoders can only jump to certain frames and have to catch up from there.)
+        let is_better_than_current = !texture_is_already_up_to_date
+            && (new_frame_is_exact_frame_requested || new_frame_is_newer_than_texture);
+        if is_better_than_current {
             #[cfg(target_arch = "wasm32")]
             {
                 video_texture.source_pixel_format = copy_web_video_frame_to_texture(
