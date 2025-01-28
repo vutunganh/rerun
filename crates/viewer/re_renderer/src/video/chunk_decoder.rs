@@ -1,6 +1,6 @@
 #![allow(dead_code, unused_variables, clippy::unnecessary_wraps)]
 
-use std::sync::Arc;
+use std::sync::{atomic::AtomicBool, Arc};
 
 use re_video::{decode::FrameContent, Chunk, Frame, Time};
 
@@ -29,6 +29,9 @@ struct DecoderOutput {
 pub struct VideoChunkDecoder {
     decoder: Box<dyn re_video::decode::AsyncDecoder>,
     decoder_output: Arc<Mutex<DecoderOutput>>,
+
+    /// Set to true if the video texture has caught up with the desired presentation timestamp since the last reset.
+    video_texture_up_to_date_since_last_reset: AtomicBool,
 }
 
 impl VideoChunkDecoder {
@@ -76,6 +79,7 @@ impl VideoChunkDecoder {
         Ok(Self {
             decoder,
             decoder_output,
+            video_texture_up_to_date_since_last_reset: AtomicBool::new(false),
         })
     }
 
@@ -130,24 +134,23 @@ impl VideoChunkDecoder {
 
         let texture_is_already_up_to_date = texture_frame_info
             .is_some_and(|info| info.presentation_time_range() == new_frame_time_range);
-        let new_frame_is_newer_than_texture = texture_frame_info.map_or(true, |info| {
-            // We don't expect frame ranges to ever overlap, but semantically it is more accurate
-            // to use the end of the texture frame range as the comparison point.
-            new_frame_time_range.start >= info.presentation_time_range().end
-        });
         let new_frame_is_exact_frame_requested =
             new_frame_time_range.contains(&presentation_timestamp);
 
-        // The frame may not be the exact one we asked for.
-        // However, if it is newer than what we have on screen right now, it's still clearly better.
-        // This is especially important if for some reason the decoder is lagging behind our timeline.
+        // If we're outdated & the frame is the one we asked for, take it!
         //
-        // We don't apply this logic if we're jumping back in time relative to what's in the texture.
-        // If we were to do that, we might end up showing frames that are older than the point in time that
-        // a user jumped to which would be rather confusing.
-        // (This is because decoders can only jump to certain frames and have to catch up from there.)
+        // But if we're outdated but the incoming frame isn't the one we asked for it's a bit more nuanced:
+        // If the decoder is just lagging behind a little bit during playback, we definitely want to show that new frame.
+        // But if there was a seek by the user, we can get very awkward behavior if we show the frames as the come in by the decoder.
+        // (since decoders can only jump to certain frames and have to catch up from there, there will be a lot of frames that are too old!)
+        // Therefore, we only show frames if we previously caught up.
+        // Since any jump backwards and any jump forward beyond what's enqueued will cause a reset, we should never run into the described problematic situation.
+        let video_texture_up_to_date_since_last_reset = self
+            .video_texture_up_to_date_since_last_reset
+            .load(std::sync::atomic::Ordering::Acquire);
         let is_better_than_current = !texture_is_already_up_to_date
-            && (new_frame_is_exact_frame_requested || new_frame_is_newer_than_texture);
+            && (new_frame_is_exact_frame_requested || video_texture_up_to_date_since_last_reset);
+
         if is_better_than_current {
             #[cfg(target_arch = "wasm32")]
             {
@@ -167,6 +170,11 @@ impl VideoChunkDecoder {
             }
 
             video_texture.frame_info = Some(frame.info.clone());
+
+            if new_frame_is_exact_frame_requested {
+                self.video_texture_up_to_date_since_last_reset
+                    .store(true, std::sync::atomic::Ordering::Release);
+            }
         }
 
         Ok(())
@@ -179,6 +187,7 @@ impl VideoChunkDecoder {
         let mut decoder_output = self.decoder_output.lock();
         decoder_output.error = None;
         decoder_output.frames.clear();
+        *self.video_texture_up_to_date_since_last_reset.get_mut() = false;
 
         Ok(())
     }
