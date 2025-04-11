@@ -40,6 +40,8 @@ pub use self::batcher::{
 #[doc(no_inline)]
 pub use arrow::array::Array as ArrowArray;
 #[doc(no_inline)]
+pub use re_arrow_util::ArrowArrayDowncastRef;
+#[doc(no_inline)]
 pub use re_log_types::{EntityPath, TimeInt, TimePoint, Timeline, TimelineName};
 #[doc(no_inline)]
 pub use re_types_core::{ArchetypeFieldName, ArchetypeName, ChunkId, ComponentName, RowId};
