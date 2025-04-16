@@ -9,13 +9,13 @@
     pub keypoint_ids: <a class="enum" href="https://doc.rust-lang.org/1.84.0/core/option/enum.Option.html" title="enum core::option::Option">Option</a>&lt;<a class="struct" href="../struct.SerializedComponentBatch.html" title="struct re_viewer::external::re_types::SerializedComponentBatch">SerializedComponentBatch</a>&gt;,
 }</code></pre><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p><strong>Archetype</strong>: A 2D point cloud with positions and optional colors, radii, labels, etc.</p>
 <h3 id="examples"><a class="doc-anchor" href="#examples">§</a>Examples</h3><h4 id="randomly-distributed-2d-points-with-varying-color-and-radius"><a class="doc-anchor" href="#randomly-distributed-2d-points-with-varying-color-and-radius">§</a>Randomly distributed 2D points with varying color and radius</h4>
-<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>rand::prelude::<span class="kw-2">*</span>;
+<div class="example-wrap ignore"><a href="#" class="tooltip" title="This example is not tested">ⓘ</a><pre class="rust rust-example-rendered"><code><span class="kw">use </span>rand::{distributions::Uniform, Rng <span class="kw">as _</span>};
 
 <span class="kw">fn </span>main() -&gt; <span class="prelude-ty">Result</span>&lt;(), Box&lt;<span class="kw">dyn </span>std::error::Error&gt;&gt; {
     <span class="kw">let </span>rec = rerun::RecordingStreamBuilder::new(<span class="string">"rerun_example_points2d_random"</span>).spawn()<span class="question-mark">?</span>;
 
-    <span class="kw">let </span><span class="kw-2">mut </span>rng = rand::rngs::SmallRng::seed_from_u64(<span class="number">42</span>);
-    <span class="kw">let </span>dist = rand::distributions::Uniform::new(-<span class="number">3.</span>, <span class="number">3.</span>);
+    <span class="kw">let </span><span class="kw-2">mut </span>rng = rand::thread_rng();
+    <span class="kw">let </span>dist = Uniform::new(-<span class="number">3.</span>, <span class="number">3.</span>);
 
     rec.log(
         <span class="string">"random"</span>,
